@@ -1,8 +1,10 @@
 import logging
-from typing import Mapping, Optional
+from multiprocessing import Pool
+from typing import List, Mapping, Optional, Sequence
 
 from blueapi.config import ApplicationConfig
 from blueapi.core import BlueskyContext
+from blueapi.core.bluesky_types import Device, Plan
 from blueapi.core.event import EventStream
 from blueapi.data_management.visit_directory_provider import (
     LocalVisitServiceClient,
@@ -14,12 +16,67 @@ from blueapi.messaging import StompMessagingTemplate
 from blueapi.messaging.base import MessagingTemplate
 from blueapi.preprocessors.attach_metadata import attach_metadata
 from blueapi.worker.reworker import RunEngineWorker
-from blueapi.worker.worker import Worker
 
 LOGGER = logging.getLogger(__name__)
 
 
 class Handler:
+    def __init__(self, config: Optional[ApplicationConfig] = None):
+        self.config = config or ApplicationConfig()
+        self.proc = Pool(processes=1)
+
+    def start(self) -> None:
+        self.proc.apply(setup_handler, [self.config])
+
+    def stop(self) -> None:
+        self.proc.apply(teardown_handler)
+        self.proc.terminate()
+
+    def get_plans(self) -> List[Plan]:
+        return self.proc.apply(get_plans)
+
+    def get_plan(self, name: str) -> Plan:
+        return self.proc.apply(get_plan, name)
+
+    def get_devices(self) -> List[Device]:
+        return self.proc.apply(get_devices)
+
+    def get_device(self, name: str) -> Device:
+        return self.proc.apply(get_device, [name])
+
+    def submit_task(self, task: RunPlan) -> str:
+        return self.proc.apply(submit_task, [task])
+
+    def clear_task(self, task_id: str) -> str:
+        return self.proc.apply(clear_task, [task_id])
+
+    def get_active_task(self) -> Optional[TrackableTask]:
+        return self.proc.apply(get_active_task)
+
+    def begin_task(self, task_id: str) -> None:
+        self.proc.apply(begin_task, [task_id])
+
+    def get_pending_task(self, task_id: str) -> Optional[TrackableTask]:
+        return self.proc.apply(get_pending_task, [task_id])
+
+    def get_state(self) -> WorkerState:
+        return self.proc.apply(get_state)
+
+    def pause(self, defer: bool) -> None:
+        self.proc.apply(pause, [defer])
+
+    def resume(self) -> None:
+        self.proc.apply(resume)
+
+    def cancel_active_task(self, failure: bool, reason: Optional[str]) -> None:
+        self.proc.apply(cancel_active_task, [failure, reason])
+
+
+class InternalHandler:
+    """
+    Manage worker and setup messaging.
+    """
+
     context: BlueskyContext
     worker: Worker
     config: ApplicationConfig
@@ -80,7 +137,7 @@ class Handler:
         self.messaging_template.disconnect()
 
 
-HANDLER: Optional[Handler] = None
+HANDLER: Optional[InternalHandler] = None
 
 
 def setup_handler(
@@ -133,7 +190,7 @@ def setup_handler(
     HANDLER = handler
 
 
-def get_handler() -> Handler:
+def get_handler() -> InternalHandler:
     """Retrieve the handler which wraps the bluesky context, worker and message bus."""
     if HANDLER is None:
         raise ValueError()
@@ -148,3 +205,58 @@ def teardown_handler() -> None:
     handler = get_handler()
     handler.stop()
     HANDLER = None
+
+
+# Static methods used in child process
+
+
+def get_plans() -> List[Plan]:
+    return [p for p in get_handler().context.plans.values()]
+
+
+def get_plan(name: str) -> Plan:
+    return get_handler().context.plans[name]
+
+
+def get_devices() -> List[Device]:
+    return [d for d in get_handler().context.devices.values()]
+
+
+def get_device(name: str) -> Device:
+    return get_handler().context.devices[name]
+
+
+def submit_task(task: RunPlan) -> str:
+    return get_handler().worker.submit_task(task)
+
+
+def clear_task(task_id: str) -> str:
+    return get_handler().worker.clear_task(task_id)
+
+
+def get_active_task() -> Optional[TrackableTask]:
+    return get_handler().worker.get_active_task()
+
+
+def begin_task(task_id: str) -> None:
+    get_handler().worker.begin_task(task_id)
+
+
+def get_pending_task(task_id: str) -> Optional[TrackableTask]:
+    return get_handler().worker.get_pending_task(task_id)
+
+
+def get_state() -> WorkerState:
+    return get_handler().worker.state
+
+
+def pause(defer: bool) -> None:
+    get_handler().worker.pause(defer)
+
+
+def resume() -> None:
+    get_handler().worker.resume()
+
+
+def cancel_active_task(failure: bool, reason: Optional[str]) -> None:
+    get_handler().worker.cancel_active_task(failure, reason)
