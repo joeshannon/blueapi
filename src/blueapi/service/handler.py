@@ -1,10 +1,13 @@
 import logging
 from multiprocessing import Pool
-from typing import List, Mapping, Optional, Sequence
+from typing import List, Mapping, Optional, Sequence, Type
+from fastapi.encoders import jsonable_encoder
+
+from pydantic import BaseModel, Field, parse_obj_as
 
 from blueapi.config import ApplicationConfig
 from blueapi.core import BlueskyContext
-from blueapi.core.bluesky_types import Device, Plan
+from blueapi.core.bluesky_types import Device
 from blueapi.core.event import EventStream
 from blueapi.data_management.visit_directory_provider import (
     LocalVisitServiceClient,
@@ -14,18 +17,38 @@ from blueapi.data_management.visit_directory_provider import (
 )
 from blueapi.messaging import StompMessagingTemplate
 from blueapi.messaging.base import MessagingTemplate
-from blueapi.preprocessors.attach_metadata import attach_metadata
+from blueapi.utils.base_model import BlueapiBaseModel
+from blueapi.worker.event import WorkerState
 from blueapi.worker.reworker import RunEngineWorker
 
 LOGGER = logging.getLogger(__name__)
 
 
+class Simple(BaseModel):
+    id: int
+    name: str = "Jane Doe"
+
+
+class Plan(BlueapiBaseModel):
+    """
+    A plan that can be run
+    """
+
+    name: str = Field(description="Referenceable name of the plan")
+    description: Optional[str] = Field(
+        description="Description/docstring of the plan", default=None
+    )
+    model: Type[BaseModel] = Field(
+        description="Validation model of the parameters for the plan"
+    )
+
+
 class Handler:
     def __init__(self, config: Optional[ApplicationConfig] = None):
         self.config = config or ApplicationConfig()
-        self.proc = Pool(processes=1)
 
     def start(self) -> None:
+        self.proc = Pool(processes=1)
         self.proc.apply(setup_handler, [self.config])
 
     def stop(self) -> None:
@@ -33,10 +56,14 @@ class Handler:
         self.proc.terminate()
 
     def get_plans(self) -> List[Plan]:
-        return self.proc.apply(get_plans)
+        ppp = self.proc.apply(get_plans)
+        print()
+        print(ppp)
+        print()
+        return [parse_obj_as(Plan, p) for p in ppp]
 
     def get_plan(self, name: str) -> Plan:
-        return self.proc.apply(get_plan, name)
+        return self.proc.apply(get_plan, [name])
 
     def get_devices(self) -> List[Device]:
         return self.proc.apply(get_devices)
@@ -211,7 +238,7 @@ def teardown_handler() -> None:
 
 
 def get_plans() -> List[Plan]:
-    return [p for p in get_handler().context.plans.values()]
+    return [p for p in get_handler().context.plans]
 
 
 def get_plan(name: str) -> Plan:
