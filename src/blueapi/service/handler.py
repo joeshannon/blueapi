@@ -17,9 +17,13 @@ from blueapi.data_management.visit_directory_provider import (
 )
 from blueapi.messaging import StompMessagingTemplate
 from blueapi.messaging.base import MessagingTemplate
+from blueapi.service.model import PlanModel
 from blueapi.utils.base_model import BlueapiBaseModel
 from blueapi.worker.event import WorkerState
 from blueapi.worker.reworker import RunEngineWorker
+from blueapi.worker.task import RunPlan
+from blueapi.worker.worker import TrackableTask, Worker
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,12 +59,13 @@ class Handler:
         self.proc.apply(teardown_handler)
         self.proc.terminate()
 
-    def get_plans(self) -> List[Plan]:
+    def get_plans(self) -> List[PlanModel]:
         ppp = self.proc.apply(get_plans)
         print()
-        print(ppp)
+        print(f"ppp: {ppp}")
+        print(f"{ppp[0]}, type: {type(ppp[0])}")
         print()
-        return [parse_obj_as(Plan, p) for p in ppp]
+        return ppp
 
     def get_plan(self, name: str) -> Plan:
         return self.proc.apply(get_plan, [name])
@@ -205,7 +210,7 @@ def setup_handler(
 
         plan_wrappers.append(lambda plan: attach_metadata(plan, provider))
 
-    handler = Handler(
+    handler = InternalHandler(
         config,
         context=BlueskyContext(
             plan_wrappers=plan_wrappers,
@@ -237,8 +242,8 @@ def teardown_handler() -> None:
 # Static methods used in child process
 
 
-def get_plans() -> List[Plan]:
-    return [p for p in get_handler().context.plans]
+def get_plans() -> List[PlanModel]:
+    return [PlanModel.from_plan(p) for p in get_handler().context.plans.values()]
 
 
 def get_plan(name: str) -> Plan:

@@ -56,9 +56,7 @@ async def on_key_error_404(_: Request, __: KeyError):
 @app.get("/plans", response_model=PlanResponse)
 def get_plans():
     """Retrieve information about all available plans."""
-    return PlanResponse(
-        plans=[PlanModel.from_plan(plan) for plan in HANDLER.get_plans()]
-    )
+    return PlanResponse(plans=HANDLER.get_plans())
 
 
 @app.get(
