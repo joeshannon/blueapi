@@ -17,7 +17,7 @@ from blueapi.data_management.visit_directory_provider import (
 )
 from blueapi.messaging import StompMessagingTemplate
 from blueapi.messaging.base import MessagingTemplate
-from blueapi.service.model import PlanModel
+from blueapi.service.model import DeviceModel, PlanModel
 from blueapi.utils.base_model import BlueapiBaseModel
 from blueapi.worker.event import WorkerState
 from blueapi.worker.reworker import RunEngineWorker
@@ -67,13 +67,13 @@ class Handler:
         print()
         return ppp
 
-    def get_plan(self, name: str) -> Plan:
+    def get_plan(self, name: str) -> PlanModel:
         return self.proc.apply(get_plan, [name])
 
-    def get_devices(self) -> List[Device]:
+    def get_devices(self) -> List[DeviceModel]:
         return self.proc.apply(get_devices)
 
-    def get_device(self, name: str) -> Device:
+    def get_device(self, name: str) -> DeviceModel:
         return self.proc.apply(get_device, [name])
 
     def submit_task(self, task: RunPlan) -> str:
@@ -246,16 +246,16 @@ def get_plans() -> List[PlanModel]:
     return [PlanModel.from_plan(p) for p in get_handler().context.plans.values()]
 
 
-def get_plan(name: str) -> Plan:
-    return get_handler().context.plans[name]
+def get_plan(name: str) -> PlanModel:
+    return PlanModel.from_plan(get_handler().context.plans[name])
 
 
-def get_devices() -> List[Device]:
-    return [d for d in get_handler().context.devices.values()]
+def get_devices() -> List[DeviceModel]:
+    return [DeviceModel.from_device(d) for d in get_handler().context.devices.values()]
 
 
-def get_device(name: str) -> Device:
-    return get_handler().context.devices[name]
+def get_device(name: str) -> DeviceModel:
+    return DeviceModel.from_device(get_handler().context.devices[name])
 
 
 def submit_task(task: RunPlan) -> str:

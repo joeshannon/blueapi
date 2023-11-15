@@ -65,15 +65,13 @@ def get_plans():
 )
 def get_plan_by_name(name: str):
     """Retrieve information about a plan by its (unique) name."""
-    return PlanModel.from_plan(HANDLER.get_plan(name))
+    return HANDLER.get_plan(name)
 
 
 @app.get("/devices", response_model=DeviceResponse)
 def get_devices():
     """Retrieve information about all available devices."""
-    return DeviceResponse(
-        devices=[DeviceModel.from_device(device) for device in HANDLER.get_devices()]
-    )
+    return DeviceResponse(devices=HANDLER.get_devices())
 
 
 @app.get(
@@ -82,7 +80,7 @@ def get_devices():
 )
 def get_device_by_name(name: str):
     """Retrieve information about a devices by its (unique) name."""
-    return DeviceModel.from_device(HANDLER.get_device(name))
+    return HANDLER.get_device(name)
 
 
 @app.post(
